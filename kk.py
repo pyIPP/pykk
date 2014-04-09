@@ -7,6 +7,16 @@ import os
 libkk = ctypes.cdll.LoadLibrary('/afs/ipp-garching.mpg.de/aug/ads/lib64/amd64_sles11/libkk.so')
 __libkk__ = ctypes.cdll.LoadLibrary('/afs/ipp-garching.mpg.de/aug/ads/lib64/%s/libkk.so' % os.environ['SYS'])
 
+__libc__ = ctypes.CDLL('libc.so.6')
+__savedstdout__ = __libc__.dup(1)
+__stdout__ = __libc__.fdopen(1, "w")
+
+def __blockstdout__():
+    __libc__.freopen("/dev/null", "w", __stdout__)
+
+def __releasestdout__():
+    __libc__.freopen("/dev/fd/%s" % str(__savedstdout__), "w", __stdout__)
+
 
 class point:
     R = 0.0
@@ -136,46 +146,39 @@ class equilibrium(object):
         jpol = numpy.zeros(rin.size, dtype=numpy.float32)
         lexper = ctypes.c_uint64(len(self.experiment))
         ldiag = ctypes.c_uint64(len(self.diagnostic))
+        __blockstdout__()
         __libkk__.kkrzbrzt_(ctypes.byref(error), ctypes.c_char_p(self.experiment), ctypes.c_char_p(self.diagnostic), 
                             ctypes.byref(self.shotnumber), ctypes.byref(self.edition), ctypes.byref(t), rin.ctypes.data_as(ctypes.c_void_p),
                             zin.ctypes.data_as(ctypes.c_void_p), ctypes.byref(lin) , br.ctypes.data_as(ctypes.c_void_p), 
                             bz.ctypes.data_as(ctypes.c_void_p) , bt.ctypes.data_as(ctypes.c_void_p), fpf.ctypes.data_as(ctypes.c_void_p), 
                             jpol.ctypes.data_as(ctypes.c_void_p), lexper , ldiag)
+        __releasestdout__()
         return magneticField(t.value, rin, zin, bt, br, bz, fpf, jpol)
    
     B = getMagneticField
     
-    def Rz_to_rhopol( self , time , R , z ):
+    def Rz_to_rhopol(self, time, R, z):
+        if not self.status:
+            raise Exception('No shotnumber specified.')
         N = numpy.size(R)
-        result = (ctypes.c_float*N)()
-        if self.__status:
-            error = ctypes.c_int(0)
-            _error = ctypes.byref(error)
-            _shotnumber = ctypes.byref(self.__shotnumber)
-            _edition = ctypes.byref(self.__edition)
-            t = ctypes.c_float( time )
-            _t = ctypes.byref( t )
-            if N == 1:
-                rin = ctypes.c_float(R)
-                zin = ctypes.c_float(z)
-            else:
-                rin = (ctypes.c_float*N)()
-                zin = (ctypes.c_float*N)()
-                for i in range(N):
-                    rin[i] = R[i]
-                    zin[i] = z[i]
-            _rin = ctypes.byref(rin)
-            _zin = ctypes.byref(zin)
-            lin = ctypes.c_int(N)
-            _lin = ctypes.byref(lin)
-            fpf = (ctypes.c_float*N)()
-            _fpf = ctypes.byref( fpf )
-            _rhopol = ctypes.byref( result )
-            lexper = ctypes.c_long(len(self.experiment))
-            ldiag = ctypes.c_long(3)
-            libkk.kkrzpfn_(_error, self.__exper,self.__diag,_shotnumber,_edition,_t,_rin,_zin,_lin,_fpf,_rhopol,lexper,ldiag)
-        return numpy.frombuffer(result, numpy.float32)
-    
+        rhoPol = numpy.zeros(N, dtype=numpy.float32)
+        fpf = numpy.zeros(N, dtype=numpy.float32)
+        error = ctypes.c_int32(0)
+        t = ctypes.c_float(time)
+        rin = numpy.zeros(N, dtype=numpy.float32)
+        zin = numpy.zeros(N, dtype=numpy.float32)
+        rin[:] = R
+        zin[:] = z
+        lin = ctypes.c_int32(N)
+        lexper = ctypes.c_uint64(len(self.experiment))
+        ldiag = ctypes.c_uint64(3)
+        __blockstdout__()
+        __libkk__.kkrzpfn_(ctypes.byref(error), ctypes.c_char_p(self.experiment), ctypes.c_char_p(self.diagnostic),
+                           ctypes.byref(self.shotnumber), ctypes.byref(self.edition), ctypes.byref(t),
+                           rin.ctypes.data_as(ctypes.c_void_p), zin.ctypes.data_as(ctypes.c_void_p), ctypes.byref(lin),
+                           fpf.ctypes.data_as(ctypes.c_void_p), rhoPol.ctypes.data_as(ctypes.c_void_p), lexper, ldiag)
+        __releasestdout__()
+        return rhoPol[0] if N==1 else rhoPol
     
     def s_to_Rz( self ,  s ):
         N = numpy.size(s)
