@@ -2,8 +2,10 @@ import ctypes
 import scipy
 import numpy
 import point
+import os
 
 libkk = ctypes.cdll.LoadLibrary('/afs/ipp-garching.mpg.de/aug/ads/lib64/amd64_sles11/libkk.so')
+__libkk__ = ctypes.cdll.LoadLibrary('/afs/ipp-garching.mpg.de/aug/ads/lib64/%s/libkk.so' % os.environ['SYS'])
 
 
 class point:
@@ -35,7 +37,32 @@ class point:
             return True
         return False
 
+class magneticField(object):
+    def __init__(self, time, R, z, Bt, Bz, Br, fpf, jpol):
+        object.__init__(self)
+        self.time = time
+        if numpy.size(Bt)!=1:
+            self.R = R
+            self.z = z
+            self.Bt = Bt
+            self.Bz = Bz
+            self.Br = Br
+            self.fpf = fpf
+            self.jpol = jpol
+        else:
+            self.R = R[0]
+            self.z = z[0]
+            self.Bt = Bt[0]
+            self.Bz = Bz[0]
+            self.Br = Br[0]
+            self.fpf = fpf[0]
+            self.jpol = jpol[0]
+        self.Bpol = numpy.sqrt(self.Bz**2 + self.Br**2)
 
+    __getitem__ = object.__getattribute__
+
+    def keys(self):
+        return self.__dict__.keys()
 
 class kk(object):
     def __init__( self , shotnumber=None,experiment='AUGD',diagnostic='FPP',edition=0):
@@ -64,7 +91,9 @@ class kk(object):
         if shotnumber > 0:
             self.__status = True
             self.__shotnumber = ctypes.c_int(shotnumber)
+            self.shotnumber.value = shotnumber
             self.__edition = ctypes.c_int(edition)
+            self.edition.value = edition
             self.__diag = ctypes.c_char_p(diag)
             try:
                 self.experiment = exper.encode()
@@ -89,45 +118,30 @@ class kk(object):
         
     
     
-    def get_B( self , time , R , z , exper='AUGD' , diag='FPP' ):
-        result = {}
-        result['Bt'] = 0.0
-        result['Bpol'] = 0.0
-        result['Br'] = 0.0
-        result['Bz'] = 0.0
-        result['time'] = 0.0
-        if self.__status:
-            error = ctypes.c_int(0)
-            _error = ctypes.byref(error)
-            _shotnumber = ctypes.byref(self.__shotnumber)
-            _edition = ctypes.byref(self.__edition)
-            t = ctypes.c_float( time )
-            _t = ctypes.byref( t )
-            rin = ctypes.c_float(R)
-            _rin = ctypes.byref(rin)
-            zin = ctypes.c_float(z)
-            _zin = ctypes.byref(zin)
-            lin = ctypes.c_int(1)
-            _lin = ctypes.byref(lin)
-            br = ctypes.c_float(0)
-            _br = ctypes.byref(br)
-            bz = ctypes.c_float(0)
-            _bz = ctypes.byref(bz)
-            bt = ctypes.c_float(0)
-            _bt = ctypes.byref(bt)
-            fpf = ctypes.c_float(0)
-            _fpf = ctypes.byref(fpf)
-            jpol = ctypes.c_float(0)
-            _jpol = ctypes.byref(jpol)
-            lexper = ctypes.c_long(len(self.experiment))
-            ldiag = ctypes.c_long(3)
-            libkk.kkrzbrzt_( _error , self.__exper, self.__diag , _shotnumber , _edition , _t , _rin , _zin , _lin , _br , _bz , _bt , _fpf , _jpol , lexper , ldiag )
-            result['Bt'] = bt.value
-            result['Bpol'] = scipy.sqrt( br.value*br.value + bz.value*bz.value )
-            result['Br'] = br.value
-            result['Bz'] = bz.value
-            result['time'] = t.value
-        return result
+    def getMagneticField(self, time, R, z):
+        if not self.status:
+            raise Exception('No shotnumber specified.')
+        error = ctypes.c_int32(0)
+        t = ctypes.c_float(time)
+        N = numpy.size(R)
+        rin = numpy.zeros(N, dtype=numpy.float32)
+        rin[:] = R
+        zin = numpy.zeros(N, dtype=numpy.float32)
+        zin[:] = z
+        lin = ctypes.c_int32(rin.size)
+        br = numpy.zeros(rin.size, dtype=numpy.float32)
+        bz = numpy.zeros(rin.size, dtype=numpy.float32)
+        bt = numpy.zeros(rin.size, dtype=numpy.float32)
+        fpf = numpy.zeros(rin.size, dtype=numpy.float32)
+        jpol = numpy.zeros(rin.size, dtype=numpy.float32)
+        lexper = ctypes.c_uint64(len(self.experiment))
+        ldiag = ctypes.c_uint64(len(self.diagnostic))
+        __libkk__.kkrzbrzt_(ctypes.byref(error), ctypes.c_char_p(self.experiment), ctypes.c_char_p(self.diagnostic), 
+                            ctypes.byref(self.shotnumber), ctypes.byref(self.edition), ctypes.byref(t), rin.ctypes.data_as(ctypes.c_void_p),
+                            zin.ctypes.data_as(ctypes.c_void_p), ctypes.byref(lin) , br.ctypes.data_as(ctypes.c_void_p), 
+                            bz.ctypes.data_as(ctypes.c_void_p) , bt.ctypes.data_as(ctypes.c_void_p), fpf.ctypes.data_as(ctypes.c_void_p), 
+                            jpol.ctypes.data_as(ctypes.c_void_p), lexper , ldiag)
+        return magneticField(t.value, rin, zin, bt, br, bz, fpf, jpol)
     
     
     def Rz_to_rhopol( self , time , R , z ):
