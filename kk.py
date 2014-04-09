@@ -37,22 +37,27 @@ class point:
 
 
 
-class kk:
-    __status = False
-    __shotnumber = ctypes.c_int(0)
-    __edition = ctypes.c_int(0)
-    
+class kk(object):
     def __init__( self , shotnumber=None,experiment='AUGD',diagnostic='FPP',edition=0):
         self.__status = False
         self.__shotnumber = ctypes.c_int(0)
+        self.shotnumber = ctypes.c_int32(0)
         self.__edition = ctypes.c_int(0)
+        self.edition = ctypes.c_int32(0)
+        self.experiment = b''
+        self.diagnostic = b''
         if shotnumber != None:
             self.Open( shotnumber , experiment , diagnostic , edition )
     
     
     def __del__( self ):
         self.Close()    
-    
+
+    def status():
+        def fget(self):
+            return self.shotnumber.value!=0
+        return locals()
+    status = property(**status())
     
     def Open( self , shotnumber , exper='AUGD' , diag='FPP' , edition=0 ):
         self.Close()
@@ -61,20 +66,26 @@ class kk:
             self.__shotnumber = ctypes.c_int(shotnumber)
             self.__edition = ctypes.c_int(edition)
             self.__diag = ctypes.c_char_p(diag)
-            vars(self)['experiment'] = exper
-            vars(self)['diagnostic'] = diag
+            try:
+                self.experiment = exper.encode()
+            except Exception:
+                self.experiment = exper
+            try:
+                self.diagnostic = diag.encode()
+            except Exception:
+                self.diagnostic = diag
             self.__exper = ctypes.c_char_p(exper)
-        return True
-        
-    
+        return self.status
     
     def Close( self ):
         if self.__status:
             self.__status = False
             self.__shotnumber = ctypes.c_int(0)
             self.__edition = ctypes.c_int(0)
-            del self.experiment
-            del self.diagnostic
+            self.shotnumber.value = 0
+            self.edition.value = 0
+            self.experiment = b''
+            self.diagnostic = b''
         
     
     
