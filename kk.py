@@ -64,7 +64,7 @@ class magneticField(object):
     def keys(self):
         return self.__dict__.keys()
 
-class kk(object):
+class equilibrium(object):
     def __init__( self , shotnumber=None,experiment='AUGD',diagnostic='FPP',edition=0):
         self.__status = False
         self.__shotnumber = ctypes.c_int(0)
@@ -142,7 +142,8 @@ class kk(object):
                             bz.ctypes.data_as(ctypes.c_void_p) , bt.ctypes.data_as(ctypes.c_void_p), fpf.ctypes.data_as(ctypes.c_void_p), 
                             jpol.ctypes.data_as(ctypes.c_void_p), lexper , ldiag)
         return magneticField(t.value, rin, zin, bt, br, bz, fpf, jpol)
-    
+   
+    B = getMagneticField
     
     def Rz_to_rhopol( self , time , R , z ):
         N = numpy.size(R)
